@@ -1,0 +1,112 @@
+# This is the SAM template that represents the architecture of your serverless application
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-template-basics.html
+
+# The AWSTemplateFormatVersion identifies the capabilities of the template
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/format-version-structure.html
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+
+# Transform section specifies one or more macros that AWS CloudFormation uses to process your template
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/transform-section-structure.html
+Transform: AWS::Serverless-2016-10-31
+
+# Shared configuration for all resources, more in
+# https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    # The PermissionsBoundary allows users to safely develop with their function's permissions constrained
+    # to their current application. All the functions and roles in this application have to include it and
+    # it has to be manually updated when you add resources to your application.
+    # More information in https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html
+    PermissionsBoundary: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${AppId}-${AWS::Region}-PermissionsBoundary"
+
+Parameters:
+  AppId:
+    Type: String
+
+# Resources declares the AWS resources that you want to include in the stack
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
+Resources:
+  # Each Lambda function is defined by properties:
+  # https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+ 
+  # This is a Lambda function config associated with the source code: generate.js
+  getAllItemsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/generate.generateRequestHandler
+      Runtime: nodejs14.x
+      MemorySize: 1024
+      Timeout: 32
+      Description: Generate Cardano Cloud-init YAML configuration files
+      Layers:
+        - arn:aws:lambda:us-east-1:393093930294:layer:cardanoNodeBuilderAPINodeModules:4
+        - arn:aws:lambda:us-east-1:393093930294:layer:cardanoNodeCloudInit:2
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          CARDANO_NODE_BUILDER_API_MODE: production
+          CARDANO_NODE_BUILDER_PATH: /tmp/scripts
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /generate
+            Method: GET
+            RequestModel:
+              Model: CardanoNodeConfigurationSettings
+            RestApiId:
+              Ref: ApiGatewayApi
+            RequestParameters:
+              - method.request.header.Authorization
+              - method.request.header.XApiKey
+              - method.request.querystring.network
+              - method.request.querystring.version
+              - method.request.querystring.sshKey
+              - method.request.querystring.sshPort
+              - method.request.querystring.relayNode1Hostname
+              - method.request.querystring.relayNode1Ip
+              - method.request.querystring.relayNode2Hostname
+              - method.request.querystring.relayNode2Ip
+              - method.request.querystring.blockNodeIp
+              - method.request.querystring.numberRelayNodes
+              - method.request.querystring.relayNodeUseHostname
+              - method.request.querystring.relayNodeUseIp
+              - method.request.querystring.relayNodeSwap
+              - method.request.querystring.relayNodeUseSwap
+              - method.request.querystring.blockNodeUseIp
+              - method.request.querystring.blockNodeSwap
+              - method.request.querystring.blockNodeUseSwap
+              - method.request.querystring.bundleSetupScripts
+              - method.request.querystring.prepareRelayNode
+              - method.request.querystring.prepareBlockNode
+              - method.request.querystring.doAutoInit
+
+
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: Cardano Node Builder API
+      Description: API for Cardano Node Builder 
+      StageName: production
+      Auth:
+        ApiKeyRequired: true
+        AddDefaultAuthorizerToCorsPreflight: false
+      Models:
+        CardanoNodeConfigurationSettings:
+          type: object
+          properties:
+            blockSetup:
+              type: string
+            blockUserData:
+              type: string
+            relaySetup:
+              type: string
+            relayUserData:
+              type: string
+      Cors:
+        AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,X-Amz-Security-Token,Authorization,X-Api-Key,X-Requested-With,Accept,Access-Control-Allow-Methods,Access-Control-Allow-Origin,Access-Control-Allow-Headers'"
+        AllowOrigin: "'*'"
